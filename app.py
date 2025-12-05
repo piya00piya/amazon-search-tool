@@ -24,7 +24,6 @@ keyword = st.text_input("探したいキーワード（空欄のままなら、�
 prioritize_points = st.checkbox("🔥 ポイント還元が高い商品を優先的に探す（裏技）")
 
 # 2. カテゴリー選択
-# ▼▼▼ 修正：カテゴリーを増やし、HomeとKitchenを分けました ▼▼▼
 category = st.selectbox(
     "カテゴリーで絞り込む（※「すべて」だと割引指定が効きません！）",
     (
@@ -40,7 +39,7 @@ category = st.selectbox(
         "Electronics": "家電・カメラ",
         "Computers": "パソコン・周辺機器",
         "Appliances": "大型家電",
-        "Home": "ホーム＆キッチン（家具・インテリア）", # ← これを追加！
+        "Home": "ホーム＆キッチン（家具・インテリア）",
         "Kitchen": "キッチン用品・食器",
         "DIY": "DIY・工具・ガーデン",
         "PetSupplies": "ペット用品",
@@ -89,14 +88,31 @@ if st.button("検索開始"):
     try:
         amazon = AmazonApi(KEY, SECRET, TAG, COUNTRY)
         
-        # キーワード設定
+        # ▼▼▼ 賢いキーワード自動設定ロジック ▼▼▼
         if not keyword:
             if prioritize_points:
                 final_keyword = "Amazonポイント"
                 st.info("💡 ポイント重視モード：キーワード「Amazonポイント」で検索します")
             else:
-                final_keyword = "-"
-                st.info("💡 キーワード指定なし：全商品から探します")
+                # カテゴリーに合わせて、空欄のときの「代わりの言葉」を変える
+                if category == "Beauty":
+                    final_keyword = "コスメ"
+                    st.info("💡 空欄のため、広いキーワード「コスメ」で検索します")
+                elif category == "Kitchen":
+                    final_keyword = "キッチン用品"
+                    st.info("💡 空欄のため、広いキーワード「キッチン用品」で検索します")
+                elif category == "Home":
+                    final_keyword = "インテリア"
+                    st.info("💡 空欄のため、広いキーワード「インテリア」で検索します")
+                elif category == "Apparel":
+                    final_keyword = "ファッション"
+                    st.info("💡 空欄のため、広いキーワード「ファッション」で検索します")
+                elif category == "GroceryAndGourmetFood":
+                    final_keyword = "食品"
+                    st.info("💡 空欄のため、広いキーワード「食品」で検索します")
+                else:
+                    final_keyword = "-"
+                    st.info("💡 キーワード指定なし：全商品から探します")
         else:
             if prioritize_points:
                 final_keyword = f"{keyword} Amazonポイント"
