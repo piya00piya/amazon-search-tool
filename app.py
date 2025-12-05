@@ -17,12 +17,11 @@ except Exception:
     st.stop()
 
 # 1. 検索ワード入力欄
-# ▼▼▼ 修正：初期値は空っぽ。空欄なら「全商品」を対象にします ▼▼▼
 keyword = st.text_input("探したいキーワード（空欄のままなら、全商品から探します）", "")
 
 # カテゴリー選択
 category = st.selectbox(
-    "カテゴリーで絞り込む（※全商品検索のときは指定推奨！）",
+    "カテゴリーで絞り込む（※「すべて」だと割引指定が効きません！絞り込み推奨）",
     (
         "All", "Electronics", "Computers", "Kitchen", "GroceryAndGourmetFood",
         "HealthPersonalCare", "Beauty", "Apparel", "Shoes",
@@ -60,21 +59,35 @@ if st.button("検索開始"):
     try:
         amazon = AmazonApi(KEY, SECRET, TAG, COUNTRY)
         
-        # ▼▼▼ ここが魔法の変更点！ ▼▼▼
-        # キーワードが空っぽなら "-" (全商品) を代わりに入れる
+        # キーワード設定
         if not keyword:
             final_keyword = "-"
-            st.info("💡 キーワード指定なし：全商品から掘り出し物を探します！")
+            st.info("💡 キーワード指定なし：全商品から探します")
         else:
             final_keyword = keyword
         
+        # ▼▼▼ 修正箇所：カテゴリーが「All」かどうかで動きを変える ▼▼▼
         with st.spinner('Amazonからデータを取得中...'):
-            result = amazon.search_items(
-                keywords=final_keyword, # "-" か 入力された言葉
-                search_index=category,
-                item_count=10,
-                min_saving_percent=discount # ★Amazon側で先に割引率で絞ってもらう設定
-            )
+            if category == "All":
+                # 「すべて」のときは割引率(min_saving_percent)を送らない（エラー回避）
+                if discount > 0:
+                    st.warning("⚠️ 注意：「すべてのカテゴリー」ではAmazonの仕様上、割引率での絞り込みができません。割引商品を探す場合はカテゴリーを指定してください。")
+                
+                result = amazon.search_items(
+                    keywords=final_keyword,
+                    search_index=category,
+                    item_count=10
+                    # min_saving_percent は入れない！
+                )
+            else:
+                # カテゴリー指定ありなら、割引率を指定してOK
+                result = amazon.search_items(
+                    keywords=final_keyword,
+                    search_index=category,
+                    item_count=10,
+                    min_saving_percent=discount
+                )
+
             items = result.items
             
             product_list = []
@@ -114,7 +127,8 @@ if st.button("検索開始"):
                 except:
                     continue
 
-            # --- フィルタリング（念のため） ---
+            # --- フィルタリング ---
+            # All検索でAPI側で絞れなかった場合も、ここで手動フィルタリングする
             filtered_list = [p for p in product_list if p['off_rate'] >= discount]
 
             # --- 並び替え ---
@@ -143,7 +157,6 @@ if st.button("検索開始"):
                             st.write(f"🔴 割引: **{p['off_rate']}% OFF**")
                             st.write(f"🟡 ポイント: **{p['points']}pt ({p['point_rate']}%)**")
                             
-                            # Keepaグラフ
                             st.write("📊 **価格変動グラフ**")
                             keepa_graph = f"https://graph.keepa.com/pricehistory.png?asin={p['asin']}&domain=co.jp"
                             st.image(keepa_graph, use_column_width=True)
