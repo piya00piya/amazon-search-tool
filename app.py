@@ -66,28 +66,25 @@ if st.button("検索開始"):
         else:
             final_keyword = keyword
         
-        # ▼▼▼ 修正箇所：カテゴリーが「All」かどうかで動きを変える ▼▼▼
         with st.spinner('Amazonからデータを取得中...'):
-            if category == "All":
-                # 「すべて」のときは割引率(min_saving_percent)を送らない（エラー回避）
-                if discount > 0:
-                    st.warning("⚠️ 注意：「すべてのカテゴリー」ではAmazonの仕様上、割引率での絞り込みができません。割引商品を探す場合はカテゴリーを指定してください。")
-                
-                result = amazon.search_items(
-                    keywords=final_keyword,
-                    search_index=category,
-                    item_count=10
-                    # min_saving_percent は入れない！
-                )
-            else:
-                # カテゴリー指定ありなら、割引率を指定してOK
-                result = amazon.search_items(
-                    keywords=final_keyword,
-                    search_index=category,
-                    item_count=10,
-                    min_saving_percent=discount
-                )
+            # ▼▼▼ 修正箇所：パラメータを賢く組み立てる ▼▼▼
+            
+            # 基本の検索条件
+            search_params = {
+                "keywords": final_keyword,
+                "search_index": category,
+                "item_count": 10
+            }
 
+            # 「割引率が1以上」かつ「カテゴリーがAll以外」のときだけ、割引指定を追加する
+            if discount > 0:
+                if category == "All":
+                    st.warning("⚠️ 注意：「すべてのカテゴリー」では割引率での絞り込みができません（Amazonの仕様）。")
+                else:
+                    search_params["min_saving_percent"] = discount
+            
+            # 検索実行（**をつけて辞書を展開して渡す）
+            result = amazon.search_items(**search_params)
             items = result.items
             
             product_list = []
@@ -128,7 +125,6 @@ if st.button("検索開始"):
                     continue
 
             # --- フィルタリング ---
-            # All検索でAPI側で絞れなかった場合も、ここで手動フィルタリングする
             filtered_list = [p for p in product_list if p['off_rate'] >= discount]
 
             # --- 並び替え ---
