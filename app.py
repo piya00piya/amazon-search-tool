@@ -24,23 +24,33 @@ keyword = st.text_input("探したいキーワード（空欄のままなら、�
 prioritize_points = st.checkbox("🔥 ポイント還元が高い商品を優先的に探す（裏技）")
 
 # 2. カテゴリー選択
+# ▼▼▼ 修正：カテゴリーを増やし、HomeとKitchenを分けました ▼▼▼
 category = st.selectbox(
     "カテゴリーで絞り込む（※「すべて」だと割引指定が効きません！）",
     (
-        "All", "Electronics", "Computers", "Kitchen", "GroceryAndGourmetFood",
-        "HealthPersonalCare", "Beauty", "Apparel", "Shoes",
-        "Toys", "Hobbies", "VideoGames", "Books", "KindleStore"
+        "All",
+        "Electronics", "Computers", "Appliances", # 家電系
+        "Home", "Kitchen", "DIY", "PetSupplies", # 生活系
+        "GroceryAndGourmetFood", "HealthPersonalCare", "Beauty", # 日用品
+        "Apparel", "Shoes", "Jewelry", "Watches", # ファッション
+        "Toys", "Hobbies", "VideoGames", "Books", "KindleStore" # 趣味
     ),
     format_func=lambda x: {
         "All": "すべてのカテゴリー",
         "Electronics": "家電・カメラ",
         "Computers": "パソコン・周辺機器",
-        "Kitchen": "ホーム＆キッチン",
+        "Appliances": "大型家電",
+        "Home": "ホーム＆キッチン（家具・インテリア）", # ← これを追加！
+        "Kitchen": "キッチン用品・食器",
+        "DIY": "DIY・工具・ガーデン",
+        "PetSupplies": "ペット用品",
         "GroceryAndGourmetFood": "食品・飲料",
         "HealthPersonalCare": "ドラッグストア",
         "Beauty": "ビューティー",
         "Apparel": "服・ファッション",
         "Shoes": "シューズ・バッグ",
+        "Jewelry": "ジュエリー",
+        "Watches": "腕時計",
         "Toys": "おもちゃ",
         "Hobbies": "ホビー",
         "VideoGames": "ゲーム",
@@ -49,7 +59,7 @@ category = st.selectbox(
     }.get(x, x)
 )
 
-# 3. Amazonからの取得順序（仕入れの順番）
+# 3. Amazonからの取得順序
 sort_by = st.selectbox(
     "Amazonからの取得順序（仕入れ）",
     ("Featured", "Price:LowToHigh", "Price:HighToLow", "NewestArrivals", "AvgCustomerReviews"),
@@ -65,13 +75,13 @@ sort_by = st.selectbox(
 # 4. 割引率スライダー
 discount = st.slider("最低割引率（OFF率）", 0, 90, 0, 10)
 
-# 5. 表示の並び替え（ここが重要！）
+# 5. 表示の並び替え
 st.markdown("---")
 st.subheader("👀 結果の並び替え")
 sort_option = st.radio(
     "どの順番で表示しますか？",
     ("ポイント還元率が高い順", "割引率が高い順", "価格が安い順"),
-    horizontal=True # 横並びで見やすく
+    horizontal=True
 )
 
 # --- 検索処理 ---
@@ -96,7 +106,6 @@ if st.button("検索開始"):
         
         product_list = []
         
-        # 50件取得ループ
         with st.spinner('Amazonからデータを収集中... (最大50件)'):
             
             search_params = {
@@ -106,6 +115,7 @@ if st.button("検索開始"):
                 "sort_by": sort_by
             }
 
+            # 割引率指定のルール（All以外かつ1%以上なら指定）
             if discount > 0:
                 if category == "All":
                     st.warning("⚠️ 注意：「すべてのカテゴリー」では割引率での絞り込みができません。")
@@ -164,38 +174,29 @@ if st.button("検索開始"):
             # --- フィルタリング ---
             filtered_list = [p for p in product_list if p['off_rate'] >= discount]
 
-            # --- 並び替えロジック（ここがあなたの求めている機能！）---
+            # --- 並び替え ---
             if sort_option == "ポイント還元率が高い順":
                 final_list = sorted(filtered_list, key=lambda x: x['point_rate'], reverse=True)
-                rank_label = "還元率"
             elif sort_option == "割引率が高い順":
                 final_list = sorted(filtered_list, key=lambda x: x['off_rate'], reverse=True)
-                rank_label = "割引率"
             else:
                 final_list = sorted(filtered_list, key=lambda x: x['price']) # 安い順
-                rank_label = "価格"
 
             # --- 結果の表示 ---
             if len(final_list) == 0:
                 st.warning("条件に合う商品が見つかりませんでした。")
             else:
-                st.success(f"{len(final_list)}件見つかりました！ {sort_option}で表示します。")
+                st.success(f"{len(final_list)}件見つかりました！")
                 
-                # enumerateを使って順位(i)をつける
                 for i, p in enumerate(final_list):
                     
-                    # 1位〜3位にはメダルをつける演出
-                    if i == 0:
-                        rank_icon = "🥇 1位"
-                    elif i == 1:
-                        rank_icon = "🥈 2位"
-                    elif i == 2:
-                        rank_icon = "🥉 3位"
-                    else:
-                        rank_icon = f"{i+1}位"
+                    if i == 0: rank_icon = "🥇 1位"
+                    elif i == 1: rank_icon = "🥈 2位"
+                    elif i == 2: rank_icon = "🥉 3位"
+                    else: rank_icon = f"{i+1}位"
 
                     with st.container():
-                        st.markdown(f"### {rank_icon} : {p['name']}") # 商品名の上に順位を表示
+                        st.markdown(f"### {rank_icon} : {p['name']}")
                         
                         col1, col2 = st.columns([1, 3])
                         with col1:
@@ -204,7 +205,6 @@ if st.button("検索開始"):
                         with col2:
                             st.write(f"💰 価格: **¥{p['price']:,}**")
                             
-                            # ポイント順のときはポイントを赤字で強調！
                             if sort_option == "ポイント還元率が高い順":
                                 st.write(f"🟡 ポイント: **{p['points']}pt ({p['point_rate']}%)**")
                                 st.write(f"🔴 割引: {p['off_rate']}% OFF")
@@ -214,7 +214,6 @@ if st.button("検索開始"):
                             
                             st.markdown(f"[🔗 Amazonで見る]({p['url']})")
                             
-                            # Keepaグラフ
                             keepa_graph = f"https://graph.keepa.com/pricehistory.png?asin={p['asin']}&domain=co.jp"
                             with st.expander("📊 価格推移グラフを見る"):
                                 st.image(keepa_graph, use_column_width=True)
