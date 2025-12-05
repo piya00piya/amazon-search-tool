@@ -18,7 +18,7 @@ except Exception:
     st.stop()
 
 # 1. 検索ワード入力欄
-keyword = st.text_input("探したいキーワード（例: セール, 在庫処分, 水, 家電）", "セール")
+keyword = st.text_input("探したいキーワード（例: セール, 在庫処分, 水, 家電）", "-")
 
 # カテゴリー選択
 category = st.selectbox(
