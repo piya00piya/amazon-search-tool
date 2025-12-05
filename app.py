@@ -1,5 +1,6 @@
 import streamlit as st
 from amazon_paapi import AmazonApi
+import time
 
 # --- 画面のデザイン ---
 st.title("🍔 Amazon オフ率＆ポイント検索ツール")
@@ -19,9 +20,9 @@ except Exception:
 # 1. 検索ワード入力欄
 keyword = st.text_input("探したいキーワード（空欄のままなら、全商品から探します）", "")
 
-# カテゴリー選択
+# 2. カテゴリー選択
 category = st.selectbox(
-    "カテゴリーで絞り込む（※「すべて」だと割引指定が効きません！絞り込み推奨）",
+    "カテゴリーで絞り込む（※「すべて」だと割引指定が効きません！）",
     (
         "All", "Electronics", "Computers", "Kitchen", "GroceryAndGourmetFood",
         "HealthPersonalCare", "Beauty", "Apparel", "Shoes",
@@ -45,12 +46,25 @@ category = st.selectbox(
     }.get(x, x)
 )
 
-# 2. 割引率スライダー
+# ▼▼▼ 追加機能：Amazonからどういう順番で取ってくるか選ぶ ▼▼▼
+sort_by = st.selectbox(
+    "Amazonからの取得順序（※ここを変えると検索結果がガラッと変わります）",
+    ("Featured", "Price:LowToHigh", "Price:HighToLow", "NewestArrivals", "AvgCustomerReviews"),
+    format_func=lambda x: {
+        "Featured": "おすすめ順（標準）",
+        "Price:LowToHigh": "価格が安い順（Amazon全体の最安値が出ます）",
+        "Price:HighToLow": "価格が高い順",
+        "NewestArrivals": "最新商品順",
+        "AvgCustomerReviews": "レビュー評価順"
+    }.get(x, x)
+)
+
+# 3. 割引率スライダー
 discount = st.slider("最低割引率（OFF率）", 0, 90, 0, 10)
 
-# 3. 並び替えオプション
+# 4. 並び替えオプション
 sort_option = st.radio(
-    "並び替え",
+    "表示の並び替え（取得したデータをどう並べるか）",
     ("ポイント還元率順", "割引率順", "価格が安い順")
 )
 
@@ -66,63 +80,74 @@ if st.button("検索開始"):
         else:
             final_keyword = keyword
         
-        with st.spinner('Amazonからデータを取得中...'):
-            # ▼▼▼ 修正箇所：パラメータを賢く組み立てる ▼▼▼
+        product_list = []
+        
+        # 50件取得ループ
+        with st.spinner('Amazonからデータを収集中... (最大50件)'):
             
             # 基本の検索条件
             search_params = {
                 "keywords": final_keyword,
                 "search_index": category,
-                "item_count": 10
+                "item_count": 10,
+                "sort_by": sort_by # ★ここでAmazonへの命令を変える！
             }
 
-            # 「割引率が1以上」かつ「カテゴリーがAll以外」のときだけ、割引指定を追加する
             if discount > 0:
                 if category == "All":
-                    st.warning("⚠️ 注意：「すべてのカテゴリー」では割引率での絞り込みができません（Amazonの仕様）。")
+                    st.warning("⚠️ 注意：「すべてのカテゴリー」では割引率での絞り込みができません。")
                 else:
                     search_params["min_saving_percent"] = discount
-            
-            # 検索実行（**をつけて辞書を展開して渡す）
-            result = amazon.search_items(**search_params)
-            items = result.items
-            
-            product_list = []
 
-            for item in items:
+            # 5ページ分（10件×5回）ループ
+            for page in range(1, 6):
                 try:
-                    if item.offers and item.offers.listings:
-                        price = item.offers.listings[0].price.amount
-                        if item.offers.listings[0].price.savings:
-                            list_price = price + item.offers.listings[0].price.savings.amount
-                        else:
-                            list_price = price
-                        
-                        points = 0
-                        if item.offers and item.offers.listings[0].loyalty_points:
-                            points = item.offers.listings[0].loyalty_points.points
-                        
-                        off_rate = 0
-                        if list_price > price:
-                            off_rate = int(((list_price - price) / list_price) * 100)
-                        
-                        point_rate = int((points / price) * 100)
-                        
-                        img_url = item.images.primary.medium.url if item.images and item.images.primary else ""
-                        asin = item.asin
+                    search_params["item_page"] = page
+                    result = amazon.search_items(**search_params)
+                    items = result.items
+                    
+                    if not items:
+                        break
 
-                        product_list.append({
-                            "name": item.item_info.title.display_value,
-                            "price": price,
-                            "off_rate": off_rate,
-                            "point_rate": point_rate,
-                            "points": points,
-                            "url": item.detail_page_url,
-                            "image": img_url,
-                            "asin": asin
-                        })
-                except:
-                    continue
+                    for item in items:
+                        try:
+                            if item.offers and item.offers.listings:
+                                price = item.offers.listings[0].price.amount
+                                if item.offers.listings[0].price.savings:
+                                    list_price = price + item.offers.listings[0].price.savings.amount
+                                else:
+                                    list_price = price
+                                
+                                points = 0
+                                if item.offers and item.offers.listings[0].loyalty_points:
+                                    points = item.offers.listings[0].loyalty_points.points
+                                
+                                off_rate = 0
+                                if list_price > price:
+                                    off_rate = int(((list_price - price) / list_price) * 100)
+                                
+                                point_rate = int((points / price) * 100)
+                                
+                                img_url = item.images.primary.medium.url if item.images and item.images.primary else ""
+                                asin = item.asin
+
+                                product_list.append({
+                                    "name": item.item_info.title.display_value,
+                                    "price": price,
+                                    "off_rate": off_rate,
+                                    "point_rate": point_rate,
+                                    "points": points,
+                                    "url": item.detail_page_url,
+                                    "image": img_url,
+                                    "asin": asin
+                                })
+                        except:
+                            continue
+                    
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    break
 
             # --- フィルタリング ---
             filtered_list = [p for p in product_list if p['off_rate'] >= discount]
