@@ -7,7 +7,6 @@ st.title("🍔 Amazon オフ率＆ポイント検索ツール")
 # ==========================================
 # ▼ 鍵の取り出し（金庫から読み込む） ▼
 # ==========================================
-# GitHubに公開しても安全なように、st.secrets という機能を使います
 try:
     KEY = st.secrets["KEY"]
     SECRET = st.secrets["SECRET"]
@@ -61,7 +60,6 @@ if st.button("検索開始"):
         amazon = AmazonApi(KEY, SECRET, TAG, COUNTRY)
         
         with st.spinner('Amazonからデータを取得中...'):
-            # カテゴリー(search_index)を指定して検索！
             result = amazon.search_items(
                 keywords=keyword,
                 search_index=category,
@@ -91,6 +89,7 @@ if st.button("検索開始"):
                         point_rate = int((points / price) * 100)
                         
                         img_url = item.images.primary.medium.url if item.images and item.images.primary else ""
+                        asin = item.asin
 
                         product_list.append({
                             "name": item.item_info.title.display_value,
@@ -99,7 +98,8 @@ if st.button("検索開始"):
                             "point_rate": point_rate,
                             "points": points,
                             "url": item.detail_page_url,
-                            "image": img_url
+                            "image": img_url,
+                            "asin": asin
                         })
                 except:
                     continue
@@ -113,11 +113,11 @@ if st.button("検索開始"):
             elif sort_option == "割引率順":
                 final_list = sorted(filtered_list, key=lambda x: x['off_rate'], reverse=True)
             else:
-                final_list = sorted(filtered_list, key=lambda x: x['price']) # 安い順
+                final_list = sorted(filtered_list, key=lambda x: x['price'])
 
             # --- 結果の表示 ---
             if len(final_list) == 0:
-                st.warning("条件に合う商品が見つかりませんでした。割引率を下げたり、キーワードを変えてみてください。")
+                st.warning("条件に合う商品が見つかりませんでした。")
             else:
                 st.success(f"{len(final_list)}件見つかりました！")
                 
@@ -132,6 +132,11 @@ if st.button("検索開始"):
                             st.write(f"💰 価格: **¥{p['price']:,}**")
                             st.write(f"🔴 割引: **{p['off_rate']}% OFF**")
                             st.write(f"🟡 ポイント: **{p['points']}pt ({p['point_rate']}%)**")
+                            
+                            # ▼▼▼ 追加機能：Keepaグラフを直接表示 ▼▼▼
+                            st.write("📊 **価格変動グラフ**")
+                            keepa_graph = f"https://graph.keepa.com/pricehistory.png?asin={p['asin']}&domain=co.jp"
+                            st.image(keepa_graph, use_column_width=True)
                         
                         st.markdown("---")
 
