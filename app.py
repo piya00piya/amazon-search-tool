@@ -6,16 +6,21 @@ import time
 st.title("🍔 Amazon オフ率＆ポイント検索ツール")
 
 # ==========================================
-# ▼ 鍵の取り出し（金庫から読み込む） ▼
+# ▼ 鍵の設定（ここが修正ポイント！） ▼
 # ==========================================
 try:
+    # ① まず、Web上の金庫(Secrets)を探してみる
     KEY = st.secrets["KEY"]
     SECRET = st.secrets["SECRET"]
     TAG = st.secrets["TAG"]
     COUNTRY = 'JP'
 except Exception:
-    st.error("⚠️ まだStreamlit Cloudで「Secrets（秘密の鍵）」が設定されていません！")
-    st.stop()
+    # ② 金庫がない場合（PCで動かす場合）、ここの鍵を使う
+    # ↓↓↓ ここにあなたのキーを入力してください ↓↓↓
+    KEY = ""       # ★ここに Access Key (AKIA...)
+    SECRET = ""    # ★ここに Secret Key
+    TAG = "masajima1-22"
+    COUNTRY = 'JP'
 
 # 1. 検索ワード入力欄
 keyword = st.text_input("探したいキーワード（空欄のままなら、全商品から探します）", "")
@@ -25,14 +30,14 @@ prioritize_points = st.checkbox("🔥 ポイント還元が高い商品を優先
 
 # 2. カテゴリー選択
 category = st.selectbox(
-    "カテゴリーで絞り込む（※「すべて」だと割引指定が効きません！）",
+    "カテゴリーで絞り込む",
     (
         "All",
-        "Electronics", "Computers", "Appliances", # 家電系
-        "Home", "Kitchen", "DIY", "PetSupplies", # 生活系
-        "GroceryAndGourmetFood", "HealthPersonalCare", "Beauty", # 日用品
-        "Apparel", "Shoes", "Jewelry", "Watches", # ファッション
-        "Toys", "Hobbies", "VideoGames", "Books", "KindleStore" # 趣味
+        "Electronics", "Computers", "Appliances",
+        "Home", "Kitchen", "DIY", "PetSupplies",
+        "GroceryAndGourmetFood", "HealthPersonalCare", "Beauty",
+        "Apparel", "Shoes", "Jewelry", "Watches",
+        "Toys", "Hobbies", "VideoGames", "Books", "KindleStore"
     ),
     format_func=lambda x: {
         "All": "すべてのカテゴリー",
@@ -86,39 +91,45 @@ sort_option = st.radio(
 # --- 検索処理 ---
 if st.button("検索開始"):
     try:
+        # キーチェック
+        if not KEY or not SECRET:
+             st.error("⚠️ エラー：コードの中に KEY と SECRET を入力して保存してください！")
+             st.stop()
+
         amazon = AmazonApi(KEY, SECRET, TAG, COUNTRY)
         
-        # ▼▼▼ 賢いキーワード自動設定ロジック ▼▼▼
-        if not keyword:
+        # ▼▼▼ キーワード処理 ▼▼▼
+        if keyword == "-":
+            clean_keyword = ""
+        else:
+            clean_keyword = keyword
+
+        if not clean_keyword:
             if prioritize_points:
                 final_keyword = "Amazonポイント"
                 st.info("💡 ポイント重視モード：キーワード「Amazonポイント」で検索します")
             else:
-                # カテゴリーに合わせて、空欄のときの「代わりの言葉」を変える
-                if category == "Beauty":
-                    final_keyword = "コスメ"
-                    st.info("💡 空欄のため、広いキーワード「コスメ」で検索します")
-                elif category == "Kitchen":
-                    final_keyword = "キッチン用品"
-                    st.info("💡 空欄のため、広いキーワード「キッチン用品」で検索します")
-                elif category == "Home":
-                    final_keyword = "インテリア"
-                    st.info("💡 空欄のため、広いキーワード「インテリア」で検索します")
-                elif category == "Apparel":
-                    final_keyword = "ファッション"
-                    st.info("💡 空欄のため、広いキーワード「ファッション」で検索します")
-                elif category == "GroceryAndGourmetFood":
-                    final_keyword = "食品"
-                    st.info("💡 空欄のため、広いキーワード「食品」で検索します")
-                else:
+                # カテゴリー別の自動キーワード
+                if category == "Beauty": final_keyword = "コスメ"
+                elif category == "Kitchen": final_keyword = "キッチン用品"
+                elif category == "Home": final_keyword = "インテリア"
+                elif category == "Apparel": final_keyword = "ファッション"
+                elif category == "GroceryAndGourmetFood": final_keyword = "食品"
+                elif category == "All":
                     final_keyword = "-"
                     st.info("💡 キーワード指定なし：全商品から探します")
+                else:
+                    final_keyword = "セール"
+                    st.info("💡 カテゴリー検索のため、キーワード「セール」で検索します")
+                
+                if category != "All" and not prioritize_points:
+                    st.info(f"💡 空欄のため、広いキーワード「{final_keyword}」で検索します")
         else:
             if prioritize_points:
-                final_keyword = f"{keyword} Amazonポイント"
+                final_keyword = f"{clean_keyword} Amazonポイント"
                 st.info(f"💡 ポイント重視モード：「{final_keyword}」で検索します")
             else:
-                final_keyword = keyword
+                final_keyword = clean_keyword
         
         product_list = []
         
@@ -131,7 +142,6 @@ if st.button("検索開始"):
                 "sort_by": sort_by
             }
 
-            # 割引率指定のルール（All以外かつ1%以上なら指定）
             if discount > 0:
                 if category == "All":
                     st.warning("⚠️ 注意：「すべてのカテゴリー」では割引率での絞り込みができません。")
@@ -142,7 +152,11 @@ if st.button("検索開始"):
                 try:
                     search_params["item_page"] = page
                     result = amazon.search_items(**search_params)
-                    items = result.items
+                    
+                    if result:
+                        items = result.items
+                    else:
+                        items = []
                     
                     if not items:
                         break
